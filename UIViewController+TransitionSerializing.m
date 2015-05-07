@@ -122,7 +122,7 @@ static NSString       *gCurrentTransitionID = nil;
 @implementation UIViewController (TransitionSerializing)
 
 
-+ (BOOL)supportsTransitionSerializing
++ (BOOL)isTransitionSerializingEnabled
 {
 #if TRANSITION_SERIALIZING_ENABLED
     return YES;

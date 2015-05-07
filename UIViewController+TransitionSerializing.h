@@ -15,7 +15,7 @@
 /*
  * returns whether the transition serializing is enabled or not
  */
-+ (BOOL)supportsTransitionSerializing;
++ (BOOL)isTransitionSerializingEnabled;
 
 
 /*
@@ -36,6 +36,10 @@
 
 @interface UINavigationController (TransitionCompletionHandling)
 
+
+/*
+ * this category provides convenience methods to handle completion of push/pop transitions
+ */
 
 - (void)pushViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion;
 - (void)popViewControllerAnimated:(BOOL)aAnimated completion:(void (^)(void))aCompletion;
