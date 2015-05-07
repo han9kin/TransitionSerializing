@@ -40,7 +40,11 @@ static NSString       *gCurrentTransitionID = nil;
 {
     NSParameterAssert([NSThread isMainThread]);
 
+#if __has_feature(objc_arc)
+    aBlock = [aBlock copy];
+#else
     aBlock = [[aBlock copy] autorelease];
+#endif
 
     [gTransitionBlocks addObject:aBlock];
 
@@ -51,7 +55,7 @@ static NSString       *gCurrentTransitionID = nil;
 }
 
 
-+ (NSString *)beginTransitionWithBlock:(void (^)(NSString *))aBlock
++ (void)beginTransitionWithBlock:(void (^)(NSString *))aBlock
 {
     NSParameterAssert([NSThread isMainThread]);
     NSParameterAssert(!gCurrentTransitionID);
@@ -72,7 +76,9 @@ static NSString       *gCurrentTransitionID = nil;
     if ([gCurrentTransitionID isEqualToString:aTransitionID])
     {
         [gTransitionBlocks removeObjectAtIndex:0];
+#if !__has_feature(objc_arc)
         [gCurrentTransitionID release];
+#endif
         gCurrentTransitionID = nil;
 
         if ([gTransitionBlocks count])
@@ -239,7 +245,9 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
     if ([sPresentedViewController isModalInTransitionSerializing] && [sPresentedViewController transitionSerializingID])
     {
+#if !__has_feature(objc_arc)
         [[sPresentedViewController retain] autorelease];
+#endif
         [self _ts_dismissViewControllerAnimated:aAnimated completion:aCompletion];
         [self handleTransitionWithTransitionID:[sPresentedViewController transitionSerializingID] completion:nil];
     }
@@ -265,7 +273,9 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
                     sPresentingViewController = [self presentingViewController];
                 }
 
+#if !__has_feature(objc_arc)
                 [[self retain] autorelease];
+#endif
 
                 if (sPresentingViewController)
                 {
