@@ -126,21 +126,6 @@ static NSString       *gCurrentTransitionID = nil;
 }
 
 
-static const char * const gTransitionSerializingModalKey = "TransitionSerializingModalKey";
-
-
-- (BOOL)isModalInTransitionSerializing
-{
-    return [objc_getAssociatedObject(self, gTransitionSerializingModalKey) boolValue];
-}
-
-
-- (void)setModalInTransitionSerializing:(BOOL)aModal
-{
-    objc_setAssociatedObject(self, gTransitionSerializingModalKey, [NSNumber numberWithBool:aModal], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-
 #if TRANSITION_SERIALIZING_ENABLED
 
 
@@ -156,21 +141,6 @@ static const char * const gTransitionSerializingDismissingKey = "TransitionSeria
 - (void)setDismissingInTransitionSerializing:(BOOL)aDismissing
 {
     objc_setAssociatedObject(self, gTransitionSerializingDismissingKey, [NSNumber numberWithBool:aDismissing], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-
-static const char * const gTransitionSerializingIDKey = "TransitionSerializingIDKey";
-
-
-- (NSString *)transitionSerializingID
-{
-    return objc_getAssociatedObject(self, gTransitionSerializingIDKey);
-}
-
-
-- (void)setTransitionSerializingID:(NSString *)aTransitionID
-{
-    objc_setAssociatedObject(self, gTransitionSerializingIDKey, aTransitionID, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 
@@ -205,96 +175,61 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 - (void)_ts_presentViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
     [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
-        NSParameterAssert(![self presentedViewController]);
-
-        if ([self presentedViewController])
-        {
-            [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
-        }
-        else
-        {
-            [self _ts_presentViewController:aViewController animated:aAnimated completion:aCompletion];
-
-            if ([aViewController isModalInTransitionSerializing])
-            {
-                [aViewController setTransitionSerializingID:sTransitionID];
-            }
-            else
-            {
-                [self handleTransitionWithTransitionID:sTransitionID completion:nil];
-            }
-        }
+        [self _ts_presentViewController:aViewController animated:aAnimated completion:aCompletion];
+        [self handleTransitionWithTransitionID:sTransitionID completion:nil];
     }];
 }
 
 
 - (void)_ts_dismissViewControllerAnimated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
-    UIViewController *sPresentedViewController = [self presentedViewController];
-
-    if (!sPresentedViewController)
+    if (aAnimated && [self isDismissingInTransitionSerializing])
     {
-        sPresentedViewController = self;
-    }
-
-    if ([sPresentedViewController isModalInTransitionSerializing] && [sPresentedViewController transitionSerializingID])
-    {
-#if !__has_feature(objc_arc)
-        [[sPresentedViewController retain] autorelease];
-#endif
-        [self _ts_dismissViewControllerAnimated:aAnimated completion:aCompletion];
-        [self handleTransitionWithTransitionID:[sPresentedViewController transitionSerializingID] completion:nil];
+        /* assume programming error, silently ignore */
     }
     else
     {
-        if (aAnimated && [self isDismissingInTransitionSerializing])
-        {
-            /* assume programming error, silently ignore */
-        }
-        else
-        {
-            [self setDismissingInTransitionSerializing:YES];
+        [self setDismissingInTransitionSerializing:YES];
 
-            [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
-                UIViewController *sPresentingViewController;
+        [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
+            UIViewController *sPresentingViewController;
 
-                if ([self presentedViewController])
-                {
-                    sPresentingViewController = self;
-                }
-                else
-                {
-                    sPresentingViewController = [self presentingViewController];
-                }
+            if ([self presentedViewController])
+            {
+                sPresentingViewController = self;
+            }
+            else
+            {
+                sPresentingViewController = [self presentingViewController];
+            }
 
 #if !__has_feature(objc_arc)
-                [[self retain] autorelease];
+            [[self retain] autorelease];
 #endif
 
-                if (sPresentingViewController)
-                {
-                    [self _ts_dismissViewControllerAnimated:aAnimated completion:^{
-                        [self setDismissingInTransitionSerializing:NO];
-
-                        if (aCompletion)
-                        {
-                            aCompletion();
-                        }
-                    }];
-                    [self handleTransitionWithTransitionID:sTransitionID completion:nil];
-                }
-                else
-                {
-                    [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
+            if (sPresentingViewController)
+            {
+                [self _ts_dismissViewControllerAnimated:aAnimated completion:^{
                     [self setDismissingInTransitionSerializing:NO];
 
                     if (aCompletion)
                     {
                         aCompletion();
                     }
+                }];
+                [self handleTransitionWithTransitionID:sTransitionID completion:nil];
+            }
+            else
+            {
+                [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
+                [self setDismissingInTransitionSerializing:NO];
+
+                if (aCompletion)
+                {
+                    aCompletion();
                 }
-            }];
-        }
+            }
+        }];
     }
 }
 
@@ -336,15 +271,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
         UIViewController *sCurrentViewController = [self currentVisibleViewController];
 
         [sCurrentViewController _ts_presentViewController:aViewController animated:aAnimated completion:aCompletion];
-
-        if ([aViewController isModalInTransitionSerializing])
-        {
-            [aViewController setTransitionSerializingID:sTransitionID];
-        }
-        else
-        {
-            [sCurrentViewController handleTransitionWithTransitionID:sTransitionID completion:nil];
-        }
+        [sCurrentViewController handleTransitionWithTransitionID:sTransitionID completion:nil];
     }];
 #else
     [[self currentVisibleViewController] presentViewController:aViewController animated:aAnimated completion:aCompletion];

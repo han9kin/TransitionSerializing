@@ -24,13 +24,6 @@
 + (void)presentViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion;
 
 
-/*
- * modalInTransitionSerializing is set on the view controller
- * when you wish to force the view controller should be dismissed before the next transition start.
- */
-@property(nonatomic, assign, getter=isModalInTransitionSerializing) BOOL modalInTransitionSerializing;
-
-
 @end
 
 
