@@ -16,11 +16,27 @@
 #if TRANSITION_SERIALIZING_ENABLED
 
 
-@interface KRTransitionQueue : NSObject
+static void _ExchangeMethod(Class aClass, SEL aOriginal, SEL aOverride)
+{
+    Method sOriginalMethod = class_getInstanceMethod(aClass, aOriginal);
+    Method sOverrideMethod = class_getInstanceMethod(aClass, aOverride);
+
+    if (class_addMethod(aClass, aOriginal, method_getImplementation(sOverrideMethod), method_getTypeEncoding(sOverrideMethod)))
+    {
+        class_replaceMethod(aClass, aOverride, method_getImplementation(sOriginalMethod), method_getTypeEncoding(sOriginalMethod));
+    }
+    else
+    {
+        method_exchangeImplementations(sOriginalMethod, sOverrideMethod);
+    }
+}
+
+
+@interface _TransitionSerializingQueue : NSObject
 @end
 
 
-@implementation KRTransitionQueue
+@implementation _TransitionSerializingQueue
 
 
 static NSMutableArray *gTransitionBlocks    = nil;
@@ -87,28 +103,6 @@ static NSString       *gCurrentTransitionID = nil;
 
             [self beginTransitionWithBlock:sBlock];
         }
-    }
-}
-
-
-@end
-
-
-@implementation NSObject (MethodOverriding)
-
-
-+ (void)exchange:(SEL)aOriginal with:(SEL)aOverride
-{
-    Method sOriginalMethod = class_getInstanceMethod(self, aOriginal);
-    Method sOverrideMethod = class_getInstanceMethod(self, aOverride);
-
-    if (class_addMethod(self, aOriginal, method_getImplementation(sOverrideMethod), method_getTypeEncoding(sOverrideMethod)))
-    {
-        class_replaceMethod(self, aOverride, method_getImplementation(sOriginalMethod), method_getTypeEncoding(sOriginalMethod));
-    }
-    else
-    {
-        method_exchangeImplementations(sOriginalMethod, sOverrideMethod);
     }
 }
 
@@ -188,7 +182,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
     {
         [sTransitionCoordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> sContext){} completion:^(id<UIViewControllerTransitionCoordinatorContext> sContext){
 
-            [KRTransitionQueue endTransitionWithID:aTransitionID];
+            [_TransitionSerializingQueue endTransitionWithID:aTransitionID];
 
             if (aCompletion)
             {
@@ -198,7 +192,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
     }
     else
     {
-        [KRTransitionQueue endTransitionWithID:aTransitionID];
+        [_TransitionSerializingQueue endTransitionWithID:aTransitionID];
 
         if (aCompletion)
         {
@@ -210,12 +204,12 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 - (void)_ts_presentViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
-    [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+    [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
         NSParameterAssert(![self presentedViewController]);
 
         if ([self presentedViewController])
         {
-            [KRTransitionQueue endTransitionWithID:sTransitionID];
+            [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
         }
         else
         {
@@ -261,7 +255,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
         {
             [self setDismissingInTransitionSerializing:YES];
 
-            [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+            [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
                 UIViewController *sPresentingViewController;
 
                 if ([self presentedViewController])
@@ -291,7 +285,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
                 }
                 else
                 {
-                    [KRTransitionQueue endTransitionWithID:sTransitionID];
+                    [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
                     [self setDismissingInTransitionSerializing:NO];
 
                     if (aCompletion)
@@ -307,8 +301,8 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 + (void)load
 {
-    [self exchange:@selector(presentViewController:animated:completion:) with:@selector(_ts_presentViewController:animated:completion:)];
-    [self exchange:@selector(dismissViewControllerAnimated:completion:) with:@selector(_ts_dismissViewControllerAnimated:completion:)];
+    _ExchangeMethod(self, @selector(presentViewController:animated:completion:), @selector(_ts_presentViewController:animated:completion:));
+    _ExchangeMethod(self, @selector(dismissViewControllerAnimated:completion:), @selector(_ts_dismissViewControllerAnimated:completion:));
 }
 
 
@@ -338,7 +332,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 + (void)presentViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
 #if TRANSITION_SERIALIZING_ENABLED
-    [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+    [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
         UIViewController *sCurrentViewController = [self currentVisibleViewController];
 
         [sCurrentViewController _ts_presentViewController:aViewController animated:aAnimated completion:aCompletion];
@@ -369,7 +363,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 - (void)_tsc_pushViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
-    [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+    [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
         [self _ts_pushViewController:aViewController animated:aAnimated];
         [self handleTransitionWithTransitionID:sTransitionID completion:aCompletion];
     }];
@@ -378,7 +372,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 - (void)_tsc_popViewControllerAnimated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
-    [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+    [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
         NSArray    *sViewControllers = [self viewControllers];
         NSUInteger  sCount           = [sViewControllers count];
 
@@ -389,7 +383,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
         }
         else
         {
-            [KRTransitionQueue endTransitionWithID:sTransitionID];
+            [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
 
             if (aCompletion)
             {
@@ -402,7 +396,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 - (void)_tsc_popToRootViewControllerAnimated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
-    [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+    [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
         NSArray    *sViewControllers = [self viewControllers];
         NSUInteger  sCount           = [sViewControllers count];
 
@@ -413,7 +407,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
         }
         else
         {
-            [KRTransitionQueue endTransitionWithID:sTransitionID];
+            [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
 
             if (aCompletion)
             {
@@ -426,7 +420,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 - (void)_tsc_popToViewController:(UIViewController *)aViewController animated:(BOOL)aAnimated completion:(void (^)(void))aCompletion
 {
-    [KRTransitionQueue addTransitionBlock:^(NSString *sTransitionID){
+    [_TransitionSerializingQueue addTransitionBlock:^(NSString *sTransitionID){
         NSArray    *sViewControllers = [self viewControllers];
         NSUInteger  sCount           = [sViewControllers count];
         NSUInteger  sIndex           = [sViewControllers indexOfObjectIdenticalTo:aViewController];
@@ -438,7 +432,7 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
         }
         else
         {
-            [KRTransitionQueue endTransitionWithID:sTransitionID];
+            [_TransitionSerializingQueue endTransitionWithID:sTransitionID];
 
             if (aCompletion)
             {
@@ -478,10 +472,10 @@ static const char * const gTransitionSerializingIDKey = "TransitionSerializingID
 
 + (void)load
 {
-    [self exchange:@selector(pushViewController:animated:) with:@selector(_ts_pushViewController:animated:)];
-    [self exchange:@selector(popViewControllerAnimated:) with:@selector(_ts_popViewControllerAnimated:)];
-    [self exchange:@selector(popToRootViewControllerAnimated:) with:@selector(_ts_popToRootViewControllerAnimated:)];
-    [self exchange:@selector(popToViewController:animated:) with:@selector(_ts_popToViewController:animated:)];
+    _ExchangeMethod(self, @selector(pushViewController:animated:), @selector(_ts_pushViewController:animated:));
+    _ExchangeMethod(self, @selector(popViewControllerAnimated:), @selector(_ts_popViewControllerAnimated:));
+    _ExchangeMethod(self, @selector(popToRootViewControllerAnimated:), @selector(_ts_popToRootViewControllerAnimated:));
+    _ExchangeMethod(self, @selector(popToViewController:animated:), @selector(_ts_popToViewController:animated:));
 }
 
 
